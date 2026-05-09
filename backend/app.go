@@ -1010,24 +1010,6 @@ func (a *App) SaveBrowserProxies(proxies []BrowserProxy) error {
 		})
 	}
 
-	// 确保内置代理始终存在（直连 + 本地代理）
-	builtins := []BrowserProxy{
-		{ProxyId: "__direct__", ProxyName: "直连（不走代理）", ProxyConfig: "direct://"},
-		{ProxyId: "__local__", ProxyName: "本地代理", ProxyConfig: "http://127.0.0.1:7890"},
-	}
-	for _, b := range builtins {
-		found := false
-		for _, p := range normalized {
-			if p.ProxyId == b.ProxyId {
-				found = true
-				break
-			}
-		}
-		if !found {
-			normalized = append([]BrowserProxy{b}, normalized...)
-		}
-	}
-
 	a.config.Browser.Proxies = normalized
 
 	// 优先写入 SQLite
@@ -1205,13 +1187,6 @@ func (a *App) migrateToSQLite() {
 			srcProxies = loaded
 		} else if len(a.config.Browser.Proxies) > 0 {
 			srcProxies = a.config.Browser.Proxies
-		} else {
-			// 初始化默认代理
-			srcProxies = []browser.Proxy{
-				{ProxyId: "__direct__", ProxyName: "直连（不走代理）", ProxyConfig: "direct://"},
-				{ProxyId: "__local__", ProxyName: "本地代理", ProxyConfig: "http://127.0.0.1:7890"},
-			}
-			log.Info("代理表为空，初始化默认代理")
 		}
 		for _, p := range srcProxies {
 			if err := a.browserMgr.ProxyDAO.Upsert(p); err != nil {

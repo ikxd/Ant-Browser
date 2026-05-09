@@ -177,33 +177,12 @@ func (a *App) scanChromeDir(chromeRoot string) []browser.Core {
 func (a *App) loadProxies() {
 	log := logger.New("Browser")
 
-	builtins := []browser.Proxy{
-		{ProxyId: "__direct__", ProxyName: "直连（不走代理）", ProxyConfig: "direct://"},
-		{ProxyId: "__local__", ProxyName: "本地代理", ProxyConfig: "http://127.0.0.1:7890"},
-	}
-
-	ensureBuiltins := func(list []browser.Proxy) []browser.Proxy {
-		for _, b := range builtins {
-			found := false
-			for _, p := range list {
-				if p.ProxyId == b.ProxyId {
-					found = true
-					break
-				}
-			}
-			if !found {
-				list = append([]browser.Proxy{b}, list...)
-			}
-		}
-		return list
-	}
-
 	// 优先从 SQLite 读取
 	if a.browserMgr.ProxyDAO != nil {
 		list, err := a.browserMgr.ProxyDAO.List()
 		if err != nil {
 			log.Error("从数据库读取代理失败", logger.F("error", err.Error()))
-		} else if len(list) > 0 {
+		} else {
 			a.config.Browser.Proxies = list
 			log.Info("代理数据从数据库加载完成", logger.F("count", len(list)))
 			return
@@ -216,14 +195,11 @@ func (a *App) loadProxies() {
 		log.Warn("读取 proxies.yaml 失败", logger.F("error", err.Error()))
 	}
 	if loaded != nil {
-		proxies := ensureBuiltins(loaded)
-		a.config.Browser.Proxies = proxies
-		log.Info("代理数据从 proxies.yaml 加载完成", logger.F("count", len(proxies)))
+		a.config.Browser.Proxies = loaded
+		log.Info("代理数据从 proxies.yaml 加载完成", logger.F("count", len(loaded)))
 		return
 	}
 
 	// 最终降级：使用 config.yaml 中的数据
-	proxies := ensureBuiltins(a.config.Browser.Proxies)
-	a.config.Browser.Proxies = proxies
-	log.Info("代理数据使用 config.yaml 默认值", logger.F("count", len(proxies)))
+	log.Info("代理数据使用 config.yaml 默认值", logger.F("count", len(a.config.Browser.Proxies)))
 }

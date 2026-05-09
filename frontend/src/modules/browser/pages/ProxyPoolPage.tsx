@@ -6,8 +6,6 @@ import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, brows
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
 
-// 内置代理 ID，不可删除、不可编辑
-const BUILTIN_PROXY_IDS = new Set(['__direct__', '__local__'])
 const PROXY_LATENCY_CACHE_KEY = 'browser:proxyPool:latencyMap:v1'
 const PROXY_IP_HEALTH_CACHE_KEY = 'browser:proxyPool:ipHealthMap:v1'
 const PROXY_SOURCE_IGNORED_NAMES_KEY = 'browser:proxyPool:sourceIgnoredProxyNames:v1'
@@ -19,21 +17,6 @@ const SPEED_RESULT_EVENT = 'proxy:speed:result'
 const IP_HEALTH_RESULT_EVENT = 'proxy:iphealth:result'
 const PROXY_SPEED_TEST_CONCURRENCY = 20
 const PROXY_IP_HEALTH_TEST_CONCURRENCY = 10
-
-const BUILTIN_PROXIES: BrowserProxy[] = [
-  { proxyId: '__direct__', proxyName: '直连（不走代理）', proxyConfig: 'direct://' },
-  { proxyId: '__local__', proxyName: '本地代理', proxyConfig: 'http://127.0.0.1:7890' },
-]
-
-function ensureBuiltinProxies(proxies: BrowserProxy[]): BrowserProxy[] {
-  const result = [...proxies]
-  for (const builtin of BUILTIN_PROXIES) {
-    if (!result.find(p => p.proxyId === builtin.proxyId)) {
-      result.unshift(builtin)
-    }
-  }
-  return result
-}
 
 interface ClashProxy {
   name: string
@@ -1009,8 +992,7 @@ export function ProxyPoolPage() {
   const loadProxies = async () => {
     setLoading(true)
     try {
-      const raw = await fetchBrowserProxies()
-      const proxyList = ensureBuiltinProxies(raw)
+      const proxyList = await fetchBrowserProxies()
       const persistedLatency: Record<string, number> = {}
       const persistedIPHealth: Record<string, ProxyIPHealthResult> = {}
       proxyList.forEach(proxy => {
@@ -1042,7 +1024,7 @@ export function ProxyPoolPage() {
     }
   }
 
-  // 直接保存完整列表，内置代理保护由后端负责
+  // 直接保存完整列表，默认代理也按普通代理处理。
   const saveProxies = useCallback(async (list: BrowserProxy[]) => {
     await saveBrowserProxies(list)
     setProxies(list)
@@ -1247,14 +1229,13 @@ export function ProxyPoolPage() {
     } else {
       setSelectedIds(prev => {
         const next = new Set(prev)
-        filteredList.filter(p => !BUILTIN_PROXY_IDS.has(p.proxyId)).forEach(p => next.add(p.proxyId))
+        filteredList.forEach(p => next.add(p.proxyId))
         return next
       })
     }
   }
 
   const handleToggleOne = (proxyId: string) => {
-    if (BUILTIN_PROXY_IDS.has(proxyId)) return
     setSelectedIds(prev => {
       const next = new Set(prev)
       next.has(proxyId) ? next.delete(proxyId) : next.add(proxyId)
@@ -1446,10 +1427,9 @@ export function ProxyPoolPage() {
         <input
           type="checkbox"
           checked={selectedIds.has(record.proxyId)}
-          disabled={BUILTIN_PROXY_IDS.has(record.proxyId)}
           onChange={() => handleToggleOne(record.proxyId)}
           onClick={e => e.stopPropagation()}
-          className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
         />
       ),
     },
@@ -1493,8 +1473,6 @@ export function ProxyPoolPage() {
       title: '操作',
       width: '320px',
       render: (_, record) => {
-        const isBuiltin = BUILTIN_PROXY_IDS.has(record.proxyId)
-        const isEditLocked = record.proxyId === '__direct__'
         const hasSource = !!record.sourceId && !!record.sourceUrl
         return (
           <div className="flex gap-2">
@@ -1522,15 +1500,11 @@ export function ProxyPoolPage() {
             >IP健康</Button>
             <Button
               size="sm" variant="ghost"
-              disabled={isEditLocked}
-              title={isEditLocked ? '直连代理不可编辑' : undefined}
-              onClick={(e) => { e.stopPropagation(); if (!isEditLocked) handleEdit(record) }}
+              onClick={(e) => { e.stopPropagation(); handleEdit(record) }}
             >编辑</Button>
             <Button
               size="sm" variant="danger"
-              disabled={isBuiltin}
-              title={isBuiltin ? '内置代理不可删除' : undefined}
-              onClick={(e) => { e.stopPropagation(); if (!isBuiltin) handleDeleteClick(record.proxyId) }}
+              onClick={(e) => { e.stopPropagation(); handleDeleteClick(record.proxyId) }}
             >删除</Button>
           </div>
         )
